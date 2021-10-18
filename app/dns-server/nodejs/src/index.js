@@ -34,22 +34,24 @@ const respond = (dnsRequest, dnsResponseSend) => {
         for (let i = 0; i < body.items.length; i++) {
             const ingress = body.items[i];
             const rules   = ingress.spec.rules;
-            for (let k = 0; k < rules.length; k++) {
-                const rule = rules[k];
-                const host = rule.host;
-                if (typeof host === "undefined") {
-                    continue;
-                }
-                if (names.includes(host)) {
-                    confirmedNames.push(host);
-                }
-                else {
-                    const match = host.match(wildcardRegex);
-                    if (match) {
-                        const hostRegex = new RegExp(`[^*]+[.]${_.escapeRegExp(match.groups.anydomain)}`);
-                        for (const name of names) {
-                            if (name.match(hostRegex)) {
-                                confirmedNames.push(name);
+            if (rules) {
+                for (let k = 0; k < rules.length; k++) {
+                    const rule = rules[k];
+                    const host = rule.host;
+                    if (typeof host === "undefined") {
+                        continue;
+                    }
+                    if (names.includes(host)) {
+                        confirmedNames.push(host);
+                    }
+                    else {
+                        const match = host.match(wildcardRegex);
+                        if (match) {
+                            const hostRegex = new RegExp(`[^*]+[.]${_.escapeRegExp(match.groups.anydomain)}`);
+                            for (const name of names) {
+                                if (name.match(hostRegex)) {
+                                    confirmedNames.push(name);
+                                }
                             }
                         }
                     }
