@@ -22,8 +22,11 @@ const respond = (dnsRequest, dnsResponseSend) => {
 
     const names = [];
     for (let i = 0; i < dnsRequest.questions.length; i++) {
-        const name = dnsRequest.questions[i].name;
-        names.push(name);
+        if (dnsRequest.questions[i].type === Packet.TYPE.ANY
+                || dnsRequest.questions[i].type === Packet.TYPE.A) {
+            const name = dnsRequest.questions[i].name;
+            names.push(name);
+        }
     }
 
     request.get(`${kc.getCurrentCluster().server}/apis/networking.k8s.io/v1/ingresses`, opts, (error, response, jsonBody) => {
