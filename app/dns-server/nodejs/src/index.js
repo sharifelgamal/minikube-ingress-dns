@@ -12,13 +12,14 @@ const opts = {};
 kc.applyToRequest(opts);
 
 const dnsPort = parseInt(process.env.DNS_PORT, 10);
+const dnsNoDataDelayMs = parseInt(process.env.DNS_NODATA_DELAY_MS || "0", 10) || 0;
 
 // See https://tools.ietf.org/html/rfc1034#section-4.3.3
 const wildcardRegex = new RegExp('^[*][.](?<anydomain>[^*]+)$');
 
 const respond = (dnsRequest, dnsResponseSend) => {
 
-    console.log(JSON.stringify(dnsRequest));
+    console.log("Request:", JSON.stringify(dnsRequest));
 
     const names = [];
     for (let i = 0; i < dnsRequest.questions.length; i++) {
@@ -62,7 +63,7 @@ const respond = (dnsRequest, dnsResponseSend) => {
             }
         }
 
-        console.log('Confirmed names:' + JSON.stringify(confirmedNames));
+        console.log('Confirmed names:', JSON.stringify(confirmedNames));
 
         const dnsResponse     = new Packet(dnsRequest);
         dnsResponse.header.qr = 1;
@@ -79,12 +80,19 @@ const respond = (dnsRequest, dnsResponseSend) => {
             });
         }
 
-        console.log(dnsResponse);
-
-        dnsResponseSend(dnsResponse);
+        if (confirmedNames.length > 0 || dnsNoDataDelayMs === 0) {
+            console.log("Direct response:", JSON.stringify(dnsResponse));
+            dnsResponseSend(dnsResponse);
+        } else {
+            // Delay NoData in case multiple DNS servers are asked for the response
+            setTimeout(() => {
+                console.log("Delayed response:", JSON.stringify(dnsResponse));
+                dnsResponseSend(dnsResponse);
+            }, dnsNoDataDelayMs);
+        }
     });
 };
 
 createServer(respond).socket.bind(dnsPort, process.env.POD_IP, () => {
-    console.log(`Listening to ${process.env.POD_IP} on port ${dnsPort}`);
+    console.log(`Listening to ${process.env.POD_IP} on port ${dnsPort} and NoData packet delay ${dnsNoDataDelayMs} ms`);
 });
