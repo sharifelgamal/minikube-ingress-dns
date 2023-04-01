@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: minikube-ingress-dns
+  namespace: kube-system
+  labels:
+    app: minikube-ingress-dns
+    app.kubernetes.io/part-of: kube-system
+data:
+  dns-nodata-delay-ms: "0"
