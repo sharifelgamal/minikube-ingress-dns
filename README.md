@@ -100,6 +100,32 @@ Version: 1.0.0
 Hostname: hello-world-app-557ff7dbd8-64mtv
 ```
 
+## Multiple DNS servers
+
+### Problem
+
+When running multiple minikube clusters, it might be desirable to activate Ingress DNS on all clusters and ask all DNS servers at once. Configuring the system to ask all minikube DNS servers is out of scope of this description, you might need a local DNS service like dnsmasq (Linux) or Acrylic DNS Proxy (Windows) to do that. Problem will arise when multiple DNS servers are queried at the same time - the first response wins. If the first response is the not-found (NoData) response, it is forwarded to the client, which is not the intended behavior.
+
+### Solution
+
+There is a configuration value `dns-nodata-delay-ms`, which adds delay to the not-found (NoData) response. Simply edit the ConfigMap, set a non-zero value like `"20"` (meaning 20 milliseconds) and wait until it is applied:
+
+```bash
+kubectl edit -n kube-system configmap minikube-ingress-dns
+```
+
+The update takes some time, so you can check if the value was applied in logs, you should see message `Updated NoData packet delay to 20 ms`:
+
+```bash
+kubectl logs -n kube-system kube-ingress-dns-minikube
+```
+
+or you can check the actual value which is visible to the Pod itself:
+
+```bash
+kubectl exec -n kube-system kube-ingress-dns-minikube -- /bin/sh -c "cat /config/dns-nodata-delay-ms"
+```
+
 ## Known issues
 
 ### .localhost domains will not resolve on chromium
