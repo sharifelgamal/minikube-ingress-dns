@@ -1,8 +1,8 @@
-import request from 'request';
 import dns2 from 'dns2';
 const {createServer, Packet} = dns2;
-import k8s from "@kubernetes/client-node";
+import * as k8s from "@kubernetes/client-node";
 import _ from "lodash";
+import fetch from 'node-fetch';
 import fs from "node:fs";
 import path from "node:path";
 import "node:util";
@@ -11,13 +11,17 @@ import process from "node:process";
 const kc = new k8s.KubeConfig();
 kc.loadFromDefault();
 
-const opts = {};
-await kc.applyToRequest(opts);
+const opts = await kc.applyToFetchOptions({
+    method: 'GET',
+});
 
 const dnsPort = parseInt(process.env.DNS_PORT, 10) || 53;
 
 const CONFIG_DIR = process.env.CONFIG_DIR || "/config";
 const DNS_NO_DATA_DELAY_MS_FILE = path.join(CONFIG_DIR, "dns-nodata-delay-ms");
+
+// DNS response codes
+const RCODE_SERVFAIL = 2;   // Server failure
 
 // Initial value from environment
 let dnsNoDataDelayMs;
@@ -85,7 +89,7 @@ if (dnsNoDataDelayMs === undefined) {
 // See https://tools.ietf.org/html/rfc1034#section-4.3.3
 const wildcardRegex = new RegExp('^[*][.](?<anydomain>[^*]+)$');
 
-const respond = (dnsRequest, dnsResponseSend) => {
+const respond = async (dnsRequest, dnsResponseSend) => {
 
     console.log("Request:", JSON.stringify(dnsRequest));
 
@@ -98,11 +102,19 @@ const respond = (dnsRequest, dnsResponseSend) => {
         }
     }
 
-    request.get(`${kc.getCurrentCluster().server}/apis/networking.k8s.io/v1/ingresses`, opts, (error, response, jsonBody) => {
+    let dnsResponse = Packet.createResponseFromRequest(dnsRequest);
+    dnsResponse.header.ra = 1;
 
+    try {
+        if (!kc.getCurrentCluster()) {
+            throw new Error("No active cluster!");
+        }
+        const response = await fetch(`${kc.getCurrentCluster().server}/apis/networking.k8s.io/v1/ingresses`, opts);
+        if (!response.ok) {
+            throw new Error(`Failed to fetch ingresses: ${response.status} ${response.statusText}`);
+        }
         const confirmedNames = [];
-
-        const body = JSON.parse(jsonBody);
+        const body = await response.json();
         for (let i = 0; i < body.items.length; i++) {
             const ingress = body.items[i];
             const rules   = ingress.spec.rules;
@@ -133,9 +145,6 @@ const respond = (dnsRequest, dnsResponseSend) => {
 
         console.log('Confirmed names:', JSON.stringify(confirmedNames));
 
-        const dnsResponse     = Packet.createResponseFromRequest(dnsRequest);
-        dnsResponse.header.ra = 1;
-
         for (let i = 0; i < confirmedNames.length; i++) {
             dnsResponse.answers.push({
                 address: process.env.POD_IP,
@@ -145,18 +154,29 @@ const respond = (dnsRequest, dnsResponseSend) => {
                 name   : confirmedNames[i]
             });
         }
-
-        if (confirmedNames.length > 0 || dnsNoDataDelayMs === 0) {
-            console.log("Direct response:", JSON.stringify(dnsResponse));
-            dnsResponseSend(dnsResponse);
-        } else {
-            // Delay NoData in case multiple DNS servers are asked for the response
-            setTimeout(() => {
-                console.log(`Delayed response (${dnsNoDataDelayMs} ms):`, JSON.stringify(dnsResponse));
-                dnsResponseSend(dnsResponse);
-            }, dnsNoDataDelayMs);
+    }
+    catch (err) {
+        let cause = err instanceof Error ? err : new Error(String(err));
+        const causes = [];
+        while (cause) {
+            causes.push(cause.message);
+            cause = cause.cause;
         }
-    });
+        console.error(`Error getting ingresses: ${causes.join(' [caused by] ')}`);
+        dnsResponse.header.rcode = RCODE_SERVFAIL;
+    }
+
+    if (dnsResponse.answers.length > 0 || dnsNoDataDelayMs === 0) {
+        console.log("Direct response:", JSON.stringify(dnsResponse));
+        dnsResponseSend(dnsResponse);
+    }
+    else {
+        // Delay NoData in case multiple DNS servers are asked for the response
+        setTimeout(() => {
+            console.log(`Delayed response (${dnsNoDataDelayMs} ms):`, JSON.stringify(dnsResponse));
+            dnsResponseSend(dnsResponse);
+        }, dnsNoDataDelayMs);
+    }
 };
 
 // noinspection JSValidateTypes
