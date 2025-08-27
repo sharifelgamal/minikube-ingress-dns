@@ -24,7 +24,7 @@ metadata:
     app.kubernetes.io/part-of: kube-system
     addonmanager.kubernetes.io/mode: Reconcile
 ---
-apiVersion: rbac.authorization.k8s.io/v1beta1
+apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: minikube-ingress-dns
@@ -56,7 +56,7 @@ rules:
       - list
       - watch
 ---
-apiVersion: rbac.authorization.k8s.io/v1beta1
+apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: minikube-ingress-dns
@@ -94,6 +94,9 @@ spec:
       ports:
         - containerPort: 53
           protocol: UDP
+      volumeMounts:
+        - mountPath: /config
+          name: minikube-ingress-dns-config-volume
       env:
         - name: DNS_PORT
           value: "53"
@@ -101,3 +104,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: status.podIP
+  volumes:
+    - name: minikube-ingress-dns-config-volume
+      configMap:
+        name: minikube-ingress-dns
