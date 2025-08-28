@@ -1,3 +1,5 @@
+ARCHIVED. Please submit all tickets and PRs to https://github.com/medyagh/minikube-ingress-dns.
+
 This is a fork of https://gitlab.com/cryptexlabs/public/development/minikube-ingress-dns/
 
 # Minikube Ingress DNS
